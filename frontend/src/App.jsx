@@ -20,7 +20,27 @@ import AIExplanation from "./components/AIExplanation";
 import NetworkMap from "./components/NetworkMap";
 import FaultTolerancePanel from "./components/FaultTolerancePanel";
 import ModelPerformancePanel from "./components/ModelPerformancePanel";
+import { runMlPrediction } from "./api/mlApi";
+const ML_API_URL = "http://127.0.0.1:8000/predict";
 
+async function fetchPrediction(sensorWindow) {
+  try {
+    const response = await fetch(ML_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sensor_data: sensorWindow,
+      }),
+    });
+
+    if (!response.ok) throw new Error("ML API error");
+
+    return await response.json();
+  } catch (err) {
+    console.error("ML backend error:", err);
+    return null;
+  }
+}
 const MAX_POINTS = 44;
 const TICK_MS = 900;
 const STORAGE_KEY = "hydrovigil_countermeasure_memory_v1";
@@ -229,6 +249,15 @@ function generateTelemetryPoint(step, phase) {
   };
 }
 
+function buildMlWindow(telemetryPoints) {
+  return telemetryPoints.slice(-10).map((p) => [
+    p.pressure,
+    p.flow,
+    p.level,
+    p.anomalyLevel,
+  ]);
+}
+
 function loadCountermeasureMemory() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -387,6 +416,10 @@ export default function App() {
   const phaseRef = useRef("normal");
   const tickRef = useRef(0);
   const timeoutsRef = useRef([]);
+  // ML backend outputs (REAL inference)
+  const [mlDecision, setMlDecision] = useState(null);     // "NORMAL" | "SUSPICIOUS" | "ATTACK"
+  const [mlRiskScore, setMlRiskScore] = useState(null);   // number (0–100)
+  const [mlConfidence, setMlConfidence] = useState(null); // "LOW" | "MEDIUM" | "HIGH"
   const toastTimerRef = useRef(null);
   const memoryRef = useRef(countermeasureMemory);
   const [telemetry, setTelemetry] = useState(() => {
@@ -455,6 +488,9 @@ export default function App() {
     setCountermeasureMemory(nextMemory);
     return { countermeasure, memoryAction };
   }, []);
+
+  
+  
 
   const startPhaseOne = useCallback(() => {
     setSimulationPhase("phase1");
@@ -563,17 +599,51 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const telemetryTimer = setInterval(() => {
-      setTelemetry((prev) => {
-        const next = [...prev, generateTelemetryPoint(tickRef.current, phaseRef.current)];
-        tickRef.current += 1;
-        return next.slice(-MAX_POINTS);
-      });
-    }, TICK_MS);
+  if (!mlDecision) return;
 
-    return () => clearInterval(telemetryTimer);
-  }, []);
+  if (mlDecision === "ATTACK") {
+    setSystemStatus("active_attack");
+  } else if (mlDecision === "SUSPICIOUS") {
+    setSystemStatus("suspicious");
+  } else {
+    setSystemStatus("normal");
+  }
+}, [mlDecision]);
 
+    // === REAL ML INFERENCE HOOK ===
+
+useEffect(() => {
+  if (telemetry.length < 20) return;
+
+  console.log("🚀 Sending telemetry window to ML");
+
+  const runMl = async () => {
+    try {
+      const windowData = telemetry
+        .slice(-20)
+        .map(t => [t.pressure, t.flow, t.level]);
+
+      const result = await fetch("http://127.0.0.1:8000/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sensor_data: windowData })
+      }).then(res => res.json());
+
+      console.log("✅ ML RESULT:", result);
+
+      setMlDecision(result.final_decision);
+      setMlRiskScore(result.risk_score);
+      setMlConfidence(result.confidence);
+
+    } catch (err) {
+      console.error("❌ ML failed:", err);
+    }
+  };
+
+  runMl();
+}, [telemetry]);
+
+  
   useEffect(() => {
     const falsePredictionTimer = setInterval(() => {
       const roll = Math.random();
@@ -620,14 +690,16 @@ export default function App() {
   const latestTelemetry = telemetry[telemetry.length - 1] ?? { pressure: 0, flow: 0, level: 0, anomalyLevel: 0 };
   const previousTelemetry = telemetry[telemetry.length - 2] ?? latestTelemetry;
 
-  const threatConfidence =
-    simulationPhase === "phase3"
-      ? 94
-      : simulationPhase === "phase2"
-      ? 88
-      : simulationPhase === "phase1"
-      ? 57
-      : 18;
+ const threatConfidence =
+  mlRiskScore !== null
+    ? mlRiskScore
+    : simulationPhase === "phase3"
+    ? 94
+    : simulationPhase === "phase2"
+    ? 88
+    : simulationPhase === "phase1"
+    ? 57
+    : 18;
 
   const learnedCountermeasures = useMemo(
     () =>
