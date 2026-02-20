@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
+import { FaWater } from "react-icons/fa";
 import StatusBadge from "./StatusBadge";
 
 function formatTimestamp(timestamp) {
@@ -21,7 +22,10 @@ export default function Header({ systemStatus, timestamp }) {
     <header className="sticky top-0 z-30 border-b border-white/10 bg-bg/88 px-4 backdrop-blur-lg sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 py-4">
         <div>
-          <h1 className="text-xl font-semibold text-textPrimary sm:text-2xl">
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-textPrimary sm:text-2xl">
+            <span className="rounded-lg border border-accent/40 bg-accent/12 p-1.5 text-accent">
+              <FaWater className="h-4 w-4" />
+            </span>
             HydroVigil
             <span className="ml-2 text-sm font-medium uppercase tracking-[0.18em] text-accent/90 sm:text-xs">
               National Water Cyber Command

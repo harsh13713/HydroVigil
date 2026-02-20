@@ -46,7 +46,7 @@ export default function KPICard({ title, value, unit, decimals = 0, delta, sever
             {unit ? <span className="pb-1 text-sm text-textSecondary">{unit}</span> : null}
           </p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-white/5 p-2 text-textSecondary">
+        <div className="rounded-lg border border-accent/35 bg-accent/12 p-2 text-accent shadow-[0_0_18px_rgba(118,213,255,0.16)]">
           <Icon />
         </div>
       </div>

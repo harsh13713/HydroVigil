@@ -4,21 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: "#0B1220",
-        card: "#111827",
-        accent: "#2563EB",
-        warning: "#D97706",
-        critical: "#DC2626",
-        textPrimary: "#E5E7EB",
-        textSecondary: "#9CA3AF",
+        bg: "#042245",
+        card: "#0A315C",
+        accent: "#76D5FF",
+        warning: "#F8B95A",
+        critical: "#FF5F6D",
+        textPrimary: "#E9F7FF",
+        textSecondary: "#B8D8EC",
       },
       fontFamily: {
         sans: ["IBM Plex Sans", "Segoe UI", "sans-serif"],
         mono: ["IBM Plex Mono", "Consolas", "monospace"],
       },
       boxShadow: {
-        panel: "0 14px 36px rgba(2, 8, 24, 0.42)",
-        elevate: "0 20px 42px rgba(2, 8, 24, 0.58)",
+        panel: "0 18px 42px rgba(2, 32, 68, 0.4)",
+        elevate: "0 24px 48px rgba(1, 28, 56, 0.6)",
       },
     },
   },

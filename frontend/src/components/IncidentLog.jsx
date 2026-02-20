@@ -5,6 +5,10 @@ const SEVERITY_STYLES = {
   medium: "bg-warning/15 text-warning ring-warning/40",
   critical: "bg-critical/15 text-critical ring-critical/40",
 };
+const PREDICTION_STYLES = {
+  Threat: "bg-critical/15 text-critical ring-critical/40",
+  "False Positive": "bg-warning/15 text-warning ring-warning/40",
+};
 
 export default function IncidentLog({ incidents }) {
   return (
@@ -15,13 +19,15 @@ export default function IncidentLog({ incidents }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] table-auto border-collapse text-left">
+        <table className="w-full min-w-[980px] table-auto border-collapse text-left">
           <thead>
             <tr className="text-xs uppercase tracking-[0.14em] text-textSecondary">
               <th className="border-b border-white/10 px-3 py-2">Timestamp</th>
               <th className="border-b border-white/10 px-3 py-2">Sensor ID</th>
               <th className="border-b border-white/10 px-3 py-2">Event</th>
+              <th className="border-b border-white/10 px-3 py-2">Prediction</th>
               <th className="border-b border-white/10 px-3 py-2">Severity</th>
+              <th className="border-b border-white/10 px-3 py-2">Counter-Action</th>
               <th className="border-b border-white/10 px-3 py-2">Status</th>
             </tr>
           </thead>
@@ -40,11 +46,28 @@ export default function IncidentLog({ incidents }) {
                 <td className="px-3 py-3">
                   <span
                     className={`inline-flex rounded-lg px-2 py-1 text-xs font-semibold uppercase ring-1 ${
+                      PREDICTION_STYLES[incident.predictionType ?? "Threat"]
+                    }`}
+                  >
+                    {incident.predictionType ?? "Threat"}
+                  </span>
+                </td>
+                <td className="px-3 py-3">
+                  <span
+                    className={`inline-flex rounded-lg px-2 py-1 text-xs font-semibold uppercase ring-1 ${
                       SEVERITY_STYLES[incident.severity]
                     }`}
                   >
                     {incident.severity}
                   </span>
+                </td>
+                <td className="px-3 py-3 text-xs text-textSecondary">
+                  <p className="text-sm text-textPrimary">{incident.countermeasure ?? "--"}</p>
+                  {incident.memoryAction && incident.memoryAction !== "N/A" ? (
+                    <span className="mt-1 inline-flex rounded-md border border-accent/35 bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-accent">
+                      {incident.memoryAction}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-3 py-3 text-textSecondary">{incident.status}</td>
               </motion.tr>

@@ -1,617 +1,942 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import {
+  FaArrowRight,
+  FaBell,
+  FaBrain,
+  FaChartLine,
+  FaLock,
+  FaNetworkWired,
+  FaDatabase,
+  FaShieldAlt,
+  FaSyncAlt,
+  FaWater,
+} from "react-icons/fa";
 import Header from "./components/Header";
 import KPICard from "./components/KPICard";
 import LiveCharts from "./components/LiveCharts";
 import IncidentLog from "./components/IncidentLog";
 import AIExplanation from "./components/AIExplanation";
 import NetworkMap from "./components/NetworkMap";
+import FaultTolerancePanel from "./components/FaultTolerancePanel";
+import ModelPerformancePanel from "./components/ModelPerformancePanel";
 
-const MAX_POINTS = 36;
-const TICK_INTERVAL_MS = 1000;
-const PHASE_1_MS = 2000;
-const PHASE_2_MS = 3600;
+const MAX_POINTS = 44;
+const TICK_MS = 900;
+const STORAGE_KEY = "hydrovigil_countermeasure_memory_v1";
+const SENSOR_IDS = ["P-11", "P-17", "P-23", "W-05", "GW-A2"];
 
-const PHASE = {
-  NORMAL: "normal",
-  PHASE_1: "phase1",
-  PHASE_2: "phase2",
-  PHASE_3: "phase3",
-};
-const ATTACK_SENSOR_IDS = ["P-11", "P-17", "P-23", "W-05", "GW-A2"];
-const FEED_INTERVAL_BY_PHASE_MS = {
-  normal: 15000,
-  phase1: 9000,
-  phase2: 6500,
-  phase3: 8000,
-};
-const BACKGROUND_INCIDENTS = {
-  normal: [
-    { event: "Routine telemetry checksum verified", severity: "low", status: "Cleared" },
-    { event: "Command audit completed with no drift", severity: "low", status: "Cleared" },
-    { event: "Edge gateway heartbeat latency normalized", severity: "low", status: "Monitoring" },
-    { event: "Operator authentication profile matched", severity: "low", status: "Cleared" },
-  ],
-  phase1: [
-    { event: "Low-amplitude pressure variance flagged", severity: "medium", status: "Monitoring" },
-    { event: "Flow baseline deviation exceeded guardband", severity: "medium", status: "Investigating" },
-    { event: "Telemetry correlation confidence reduced", severity: "medium", status: "Monitoring" },
-  ],
-  phase2: [
-    { event: "Write-command burst detected on control segment", severity: "critical", status: "Investigating" },
-    { event: "Sustained hydraulic mismatch across paired sensors", severity: "critical", status: "Escalated" },
-    { event: "Safety threshold override attempt intercepted", severity: "critical", status: "Investigating" },
-    { event: "Anomalous actuator response pattern confirmed", severity: "critical", status: "Escalated" },
-  ],
-  phase3: [
-    { event: "Containment policy lock remains active", severity: "medium", status: "Monitoring" },
-    { event: "Forensic capture pipeline synchronized", severity: "medium", status: "Investigating" },
-    { event: "Residual anomaly dampening in progress", severity: "medium", status: "Monitoring" },
-  ],
+const MODEL_REPORTS = {
+  transformerLstmFallback: {
+    accuracy: 0.97,
+    macroF1: 0.83,
+    weightedF1: 0.97,
+    attackPrecision: 0.62,
+    attackRecall: 0.72,
+    attackF1: 0.67,
+    normalSupport: 138700,
+    attackSupport: 5462,
+  },
+  dualModelRedundancy: {
+    accuracy: 0.98,
+    macroF1: 0.86,
+    weightedF1: 0.98,
+    attackPrecision: 0.75,
+    attackRecall: 0.7,
+    attackF1: 0.73,
+    normalSupport: 138700,
+    attackSupport: 5462,
+  },
 };
 
-function randomVariance(scale) {
-  return (Math.random() - 0.5) * scale;
+const FALSE_POSITIVE_PATTERNS = [
+  {
+    key: "pressure-harmonic-variance",
+    label: "Pressure harmonic variance",
+    countermeasure: "Apply 8s temporal smoothing and cross-check with valve-state channel.",
+  },
+  {
+    key: "flow-calibration-drift",
+    label: "Flow calibration drift",
+    countermeasure: "Trigger sensor recalibration and fallback to redundant flow estimator.",
+  },
+  {
+    key: "water-level-noise-burst",
+    label: "Water level noise burst",
+    countermeasure: "Suppress burst window and re-validate with dual-model consensus.",
+  },
+];
+
+const PRIMARY_BG_IMAGE =
+  "/bg-pipeline-close.jpg";
+const SECONDARY_BG_IMAGE =
+  "/bg-waterflow-line.jpg";
+
+const LANDING_CARDS = [
+  {
+    title: "AI-Driven Threat Intelligence",
+    description:
+      "Real-time anomaly detection across pressure, flow, and water-level streams with coordinated attack correlation.",
+    icon: FaBrain,
+  },
+  {
+    title: "Secure Pipeline Telemetry Grid",
+    description:
+      "Industrial-grade monitoring network with continuous signal validation and resilient data acquisition pathways.",
+    icon: FaNetworkWired,
+  },
+  {
+    title: "Autonomous Containment Layer",
+    description:
+      "Adaptive counter-actions, false-positive memory reuse, and fault-tolerant response for mission-critical operations.",
+    icon: FaLock,
+  },
+];
+
+const AI_BRIEFING = {
+  normal: {
+    confidence: 18,
+    headline: "All monitored signals remain within trusted baseline.",
+    summary:
+      "Correlation drift is minimal across pressure-flow-level channels. Redundancy checks are stable and no malicious indicators are present.",
+    threatLevel: "Low",
+    expanded: false,
+    signals: [
+      "Pressure-flow covariance stable across rolling window.",
+      "Fallback model idle with healthy confidence margins.",
+      "No sustained divergence in water-level telemetry.",
+    ],
+    recommendations: [
+      "Maintain routine sensor calibration cycle.",
+      "Continue passive anomaly scoring at 900ms cadence.",
+      "Archive latest baseline profile for drift monitoring.",
+    ],
+  },
+  phase1: {
+    confidence: 57,
+    headline: "Irregular signal variance detected.",
+    summary:
+      "Pressure oscillation and flow drift exceed normal operating variance. Correlation integrity check is flagged as suspicious but not yet critical.",
+    threatLevel: "Guarded",
+    expanded: false,
+    signals: [
+      "Pressure waveform shows growing high-frequency oscillation.",
+      "Flow baseline drifting beyond learned seasonal envelope.",
+      "Redundancy cross-check disagreement at 0.42 anomaly score.",
+    ],
+    recommendations: [
+      "Increase polling sensitivity on zone-3 pressure cluster.",
+      "Activate shadow model verification for flow channel.",
+      "Prepare containment rules for coordinated manipulation pattern.",
+    ],
+  },
+  phase2: {
+    confidence: 88,
+    headline: "Escalation detected across correlated sensor channels.",
+    summary:
+      "Rapid pressure spikes and aggressive flow inflation indicate potential malicious data manipulation. Active intrusion pattern now likely.",
+    threatLevel: "High",
+    expanded: false,
+    signals: [
+      "Pressure exceeds secure envelope with synchronized spike intervals.",
+      "Flow threshold breached above safe hydraulic band.",
+      "Water-level fluctuation no longer aligns with demand profile.",
+    ],
+    recommendations: [
+      "Force dual-model arbitration on all critical channels.",
+      "Throttle unsafe actuation requests from suspect node.",
+      "Prioritize incident response for affected sensor gateway.",
+    ],
+  },
+  phase3: {
+    confidence: 94,
+    headline: "Containment protocol engaged. Investigation in progress.",
+    summary:
+      "Detected coordinated manipulation of flow-pressure correlation. Probability of malicious intrusion: 94%.",
+    threatLevel: "High",
+    expanded: true,
+    signals: [
+      "Correlated anomaly fingerprint matches known adversarial pattern.",
+      "Fallback path confirms attack-class confidence above threshold.",
+      "Containment policy reduced active drift across all channels.",
+    ],
+    recommendations: [
+      "Lock suspect source and preserve forensic packet traces.",
+      "Keep dual-model redundancy active during stabilization window.",
+      "Commit validated counter-action to long-term memory.",
+    ],
+  },
+};
+
+function randomItem(list) {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
-function formatTime(date) {
-  return date.toLocaleTimeString("en-US", {
-    hour12: false,
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatClock(date) {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
+    hour12: false,
+  }).format(date);
 }
 
-function pickRandomAttackSensor(previousSensorId) {
-  const candidates = ATTACK_SENSOR_IDS.filter((id) => id !== previousSensorId);
-  const pool = candidates.length > 0 ? candidates : ATTACK_SENSOR_IDS;
-  return pool[Math.floor(Math.random() * pool.length)];
+function formatIncidentTimestamp(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
 }
 
-function pickRandomItem(items) {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-function buildBackgroundIncident(phase, targetSensorId) {
-  const template = pickRandomItem(BACKGROUND_INCIDENTS[phase] ?? BACKGROUND_INCIDENTS.normal);
-  const pool = ATTACK_SENSOR_IDS.filter(Boolean);
-  const sensorId =
-    phase !== PHASE.NORMAL && Math.random() < 0.35 ? targetSensorId : pickRandomItem(pool);
-  return { ...template, sensorId };
-}
-
-function buildDataPoint(index, phase) {
-  const driftCycle = ((index % 12) / 11) * 7.5;
+function generateTelemetryPoint(step, phase) {
   const now = new Date();
+  const drift = (step % 24) / 24;
+  let pressure = 72 + Math.sin(step / 3.7) * 1.8 + (Math.random() - 0.5) * 0.9;
+  let flow = 40 + Math.sin(step / 5.4) * 1.3 + (Math.random() - 0.5) * 0.65;
+  let level = 68 + Math.sin(step / 8) * 0.9 + (Math.random() - 0.5) * 0.42;
+  let anomalyLevel = 0.1 + Math.random() * 0.12;
 
-  let pressure = 58 + Math.sin(index / 2.4) * 1.8 + randomVariance(1.2);
-  let flow = 132 + Math.cos(index / 3.1) * 2.1 + randomVariance(1.6);
-  let level = 78 + Math.sin(index / 3.6) * 1.2 + randomVariance(0.9);
-  let anomalyLevel = 0;
-
-  if (phase === PHASE.PHASE_1) {
-    pressure = 57 + Math.sin(index * 1.1) * 3.8 + randomVariance(1.8);
-    flow = 134 + driftCycle + randomVariance(1.7);
-    level = 77 + Math.sin(index * 0.9) * 1.8 + randomVariance(1.2);
-    anomalyLevel = 0.35;
-  }
-
-  if (phase === PHASE.PHASE_2) {
-    pressure = 69 + Math.sin(index * 1.6) * 13 + (index % 4 === 0 ? 10 : 0) + randomVariance(2.8);
-    flow = 166 + Math.cos(index * 1.05) * 10 + randomVariance(3.8);
-    level = 71 + Math.sin(index * 2.1) * 8.5 + randomVariance(3.1);
-    anomalyLevel = 0.92;
-  }
-
-  if (phase === PHASE.PHASE_3) {
-    pressure = 64 + Math.sin(index * 1.15) * 7.2 + randomVariance(2.3);
-    flow = 154 + Math.cos(index * 1.2) * 6.2 + randomVariance(2.6);
-    level = 74 + Math.sin(index * 1.6) * 5.6 + randomVariance(2.1);
-    anomalyLevel = 0.66;
+  if (phase === "phase1") {
+    pressure += Math.sin(step * 1.7) * 2.5;
+    flow += 1.8 + drift * 3;
+    anomalyLevel = 0.45 + Math.random() * 0.1;
+  } else if (phase === "phase2") {
+    pressure += 7.5 + Math.sin(step * 2.2) * 6.4 + (Math.random() > 0.74 ? 4.8 : 0);
+    flow += 7.2 + Math.sin(step / 1.8) * 3.9;
+    level += Math.sin(step * 1.9) * 5.6;
+    anomalyLevel = 0.8 + Math.random() * 0.15;
+  } else if (phase === "phase3") {
+    pressure += 3.4 + Math.sin(step * 1.6) * 3.2;
+    flow += 3.1 + Math.sin(step / 2.5) * 2.3;
+    level += Math.sin(step * 1.4) * 2.8;
+    anomalyLevel = 0.63 + Math.random() * 0.13;
   }
 
   return {
-    id: index,
-    time: formatTime(now),
-    pressure,
-    flow,
-    level,
-    anomalyLevel,
+    time: formatClock(now),
+    pressure: clamp(pressure, 52, 96),
+    flow: clamp(flow, 28, 64),
+    level: clamp(level, 50, 84),
+    anomalyLevel: clamp(anomalyLevel, 0, 1),
   };
 }
 
-function seedData() {
-  return Array.from({ length: MAX_POINTS }, (_, index) => buildDataPoint(index, PHASE.NORMAL));
-}
-
-const ICONS = {
-  nodes: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M4 4h6v6H4zM14 4h6v6h-6zM9 14h6v6H9z" />
-      <path d="M10 7h4M7 10v4M17 10v4M10 17h4" />
-    </svg>
-  ),
-  sensors: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M12 4a8 8 0 0 1 8 8" />
-      <path d="M12 8a4 4 0 0 1 4 4" />
-      <circle cx="12" cy="12" r="2" />
-      <path d="M4 20h16" />
-    </svg>
-  ),
-  threat: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M12 3l8 4v6c0 5.2-3.6 8.8-8 10-4.4-1.2-8-4.8-8-10V7z" />
-      <path d="M12 8v5" />
-      <circle cx="12" cy="16" r="1" />
-    </svg>
-  ),
-  anomaly: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 12h4l2-6 4 12 2-6h6" />
-    </svg>
-  ),
-  response: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 8v5l3 2" />
-    </svg>
-  ),
-  confidence: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M4 15l4-4 3 3 5-6 4 4" />
-      <path d="M4 20h16" />
-    </svg>
-  ),
-};
-
-function playSubtleBeep() {
-  if (typeof window === "undefined") return;
+function loadCountermeasureMemory() {
   try {
-    const AudioContextRef = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextRef) return;
-    const ctx = new AudioContextRef();
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = 740;
-    gain.gain.value = 0.03;
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-    oscillator.start();
-    oscillator.stop(ctx.currentTime + 0.14);
-    oscillator.onended = () => {
-      ctx.close();
-    };
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
   } catch {
-    // Audio is optional for this simulation mode.
+    return {};
   }
 }
 
-export default function App() {
-  const [timestamp, setTimestamp] = useState(new Date());
-  const [data, setData] = useState(seedData);
-  const [simulationPhase, setSimulationPhase] = useState(PHASE.NORMAL);
-  const [attackTargetId, setAttackTargetId] = useState("P-23");
-  const [toast, setToast] = useState(null);
-  const [incidents, setIncidents] = useState([
+function createSeedIncidents() {
+  return [
     {
-      id: 1,
-      timestamp: "08:42:15",
-      sensorId: "P-11",
-      event: "Baseline packet profile restored",
+      id: "seed-1",
+      timestamp: formatIncidentTimestamp(new Date(Date.now() - 1000 * 60 * 11)),
+      sensorId: "P-17",
+      event: "Baseline drift check completed successfully.",
+      predictionType: "Threat",
       severity: "low",
-      status: "Cleared",
+      countermeasure: "No action required.",
+      memoryAction: "N/A",
+      status: "Closed",
+      mitigationSeconds: 12,
     },
     {
-      id: 2,
-      timestamp: "08:39:01",
-      sensorId: "P-19",
-      event: "Unauthorized Modbus command rejected",
-      severity: "medium",
-      status: "Contained",
-    },
-    {
-      id: 3,
-      timestamp: "08:34:42",
+      id: "seed-2",
+      timestamp: formatIncidentTimestamp(new Date(Date.now() - 1000 * 60 * 7)),
       sensorId: "W-05",
-      event: "Telemetry drift above threshold",
+      event: "False alert from transient level turbulence.",
+      predictionType: "False Positive",
       severity: "medium",
-      status: "Monitoring",
+      countermeasure: "Burst suppression filter applied and confirmed.",
+      memoryAction: "Stored for future reuse",
+      status: "Resolved",
+      mitigationSeconds: 38,
     },
     {
-      id: 4,
-      timestamp: "08:30:05",
+      id: "seed-3",
+      timestamp: formatIncidentTimestamp(new Date(Date.now() - 1000 * 60 * 3)),
       sensorId: "GW-A2",
-      event: "Credential replay attempt blocked",
+      event: "Primary model confidence dip. LSTM fallback engaged.",
+      predictionType: "Threat",
       severity: "low",
-      status: "Cleared",
+      countermeasure: "Dual-model arbitration maintained service continuity.",
+      memoryAction: "N/A",
+      status: "Mitigated",
+      mitigationSeconds: 21,
+      fallbackActivated: true,
     },
-  ]);
+  ];
+}
 
-  const phaseTimersRef = useRef([]);
-  const toastTimeoutRef = useRef(null);
-  const incidentIdRef = useRef(4);
+function tryPlayBeep() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  try {
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 640;
+    gain.gain.value = 0.012;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.08);
+  } catch {
+    // Ignore silent failures where browser blocks autoplay audio.
+  }
+}
+
+function LandingScreen({ onEnter }) {
+  return (
+    <motion.section
+      className="landing-screen relative z-30 flex min-h-screen items-center px-4 py-10 sm:px-6 lg:px-8"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      <div className="landing-orb landing-orb-a" />
+      <div className="landing-orb landing-orb-b" />
+
+      <div className="mx-auto flex w-full max-w-6xl flex-col items-center">
+        <motion.div
+          className="landing-hero glass-panel w-full rounded-xl px-6 py-10 text-center shadow-elevate sm:px-10"
+          initial={{ y: 24, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
+          <p className="text-xs uppercase tracking-[0.22em] text-accent/95">National Water Cybersecurity Grid</p>
+          <h1 className="mt-4 text-3xl font-semibold leading-tight text-textPrimary sm:text-5xl">
+            HydroVigil
+            <span className="block text-xl font-medium text-accent/95 sm:mt-2 sm:text-3xl">
+              AI-Powered Cyber Defense for Smart Water Infrastructure
+            </span>
+          </h1>
+          <p className="mx-auto mt-5 max-w-3xl text-sm leading-7 text-textSecondary sm:text-base">
+            A futuristic command interface for real-time attack simulation, intelligent threat reasoning, and resilient
+            system stabilization.
+          </p>
+
+          <motion.button
+            type="button"
+            onClick={onEnter}
+            className="ripple-btn mt-8 inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-bg"
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            Enter Command Center
+            <FaArrowRight className="h-3.5 w-3.5" />
+          </motion.button>
+        </motion.div>
+
+        <div className="mt-6 grid w-full gap-4 md:grid-cols-3">
+          {LANDING_CARDS.map((card, index) => {
+            const Icon = card.icon;
+            return (
+              <motion.article
+                key={card.title}
+                className="landing-card glass-panel rounded-xl p-5 shadow-panel"
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.36, delay: 0.08 * index }}
+                whileHover={{ y: -4 }}
+              >
+                <div className="inline-flex rounded-lg border border-accent/45 bg-accent/10 p-2 text-accent">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <h3 className="mt-3 text-base font-semibold text-textPrimary">{card.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-textSecondary">{card.description}</p>
+              </motion.article>
+            );
+          })}
+        </div>
+      </div>
+    </motion.section>
+  );
+}
+
+export default function App() {
+  const [showLanding, setShowLanding] = useState(true);
+  const [activeView, setActiveView] = useState("operations");
+  const [timestamp, setTimestamp] = useState(() => new Date());
+  const [systemStatus, setSystemStatus] = useState("normal");
+  const [simulationPhase, setSimulationPhase] = useState("normal");
+  const [simulationRunning, setSimulationRunning] = useState(false);
+  const [targetNodeId, setTargetNodeId] = useState(() => randomItem(SENSOR_IDS));
+  const [ambientAttackGlow, setAmbientAttackGlow] = useState(false);
+  const [overlayFlash, setOverlayFlash] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [aiBriefing, setAiBriefing] = useState(AI_BRIEFING.normal);
+  const [incidents, setIncidents] = useState(createSeedIncidents);
+  const [countermeasureMemory, setCountermeasureMemory] = useState(() => loadCountermeasureMemory());
+  const phaseRef = useRef("normal");
+  const tickRef = useRef(0);
+  const timeoutsRef = useRef([]);
+  const toastTimerRef = useRef(null);
+  const memoryRef = useRef(countermeasureMemory);
+  const [telemetry, setTelemetry] = useState(() => {
+    const points = [];
+    for (let i = 0; i < 34; i += 1) points.push(generateTelemetryPoint(i, "normal"));
+    tickRef.current = points.length;
+    return points;
+  });
+
+  const addIncident = useCallback((entry) => {
+    setIncidents((prev) => [
+      {
+        id: `inc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: formatIncidentTimestamp(),
+        ...entry,
+      },
+      ...prev,
+    ].slice(0, 36));
+  }, []);
+
+  const showToast = useCallback((payload) => {
+    setToast(payload);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4200);
+  }, []);
+
+  const clearSimulationTimers = useCallback(() => {
+    timeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+    timeoutsRef.current = [];
+  }, []);
+
+  const applyCountermeasureMemory = useCallback((pattern) => {
+    const existing = memoryRef.current[pattern.key];
+    const now = Date.now();
+    let nextMemory;
+    let countermeasure;
+    let memoryAction;
+
+    if (existing) {
+      countermeasure = existing.countermeasure;
+      memoryAction = "Reused from memory";
+      nextMemory = {
+        ...memoryRef.current,
+        [pattern.key]: {
+          ...existing,
+          useCount: existing.useCount + 1,
+          lastUsed: now,
+        },
+      };
+    } else {
+      countermeasure = pattern.countermeasure;
+      memoryAction = "Stored for future reuse";
+      nextMemory = {
+        ...memoryRef.current,
+        [pattern.key]: {
+          key: pattern.key,
+          label: pattern.label,
+          countermeasure: pattern.countermeasure,
+          useCount: 1,
+          lastUsed: now,
+        },
+      };
+    }
+
+    memoryRef.current = nextMemory;
+    setCountermeasureMemory(nextMemory);
+    return { countermeasure, memoryAction };
+  }, []);
+
+  const startPhaseOne = useCallback(() => {
+    setSimulationPhase("phase1");
+    setSystemStatus("suspicious");
+    setAiBriefing(AI_BRIEFING.phase1);
+    setAmbientAttackGlow(false);
+  }, []);
+
+  const startPhaseTwo = useCallback(
+    (nodeId) => {
+      setSimulationPhase("phase2");
+      setSystemStatus("active_attack");
+      setAiBriefing(AI_BRIEFING.phase2);
+      setAmbientAttackGlow(true);
+      setOverlayFlash(true);
+      tryPlayBeep();
+      setTimeout(() => setOverlayFlash(false), 340);
+      showToast({
+        type: "critical",
+        message: `Critical anomaly detected in sensor ${nodeId}`,
+      });
+      addIncident({
+        sensorId: nodeId,
+        event: "Critical anomaly burst detected during coordinated attack escalation.",
+        predictionType: "Threat",
+        severity: "critical",
+        countermeasure: "Attack signature isolation and emergency cross-correlation initiated.",
+        memoryAction: "N/A",
+        status: "Investigating",
+        mitigationSeconds: 59,
+      });
+    },
+    [addIncident, showToast]
+  );
+
+  const startPhaseThree = useCallback(
+    (nodeId) => {
+      setSimulationPhase("phase3");
+      setSystemStatus("active_attack");
+      setAiBriefing(AI_BRIEFING.phase3);
+
+      const memoryOutcome = applyCountermeasureMemory({
+        key: "coordinated-flow-pressure-manipulation",
+        label: "Coordinated flow-pressure manipulation",
+        countermeasure: "Deploy correlation lock, freeze suspect actuator path, and keep dual-model voting active.",
+      });
+
+      addIncident({
+        sensorId: nodeId,
+        event: "Detected coordinated manipulation of flow-pressure correlation.",
+        predictionType: "Threat",
+        severity: "critical",
+        countermeasure: memoryOutcome.countermeasure,
+        memoryAction: memoryOutcome.memoryAction,
+        status: "Investigating",
+        mitigationSeconds: 72,
+      });
+    },
+    [addIncident, applyCountermeasureMemory]
+  );
+
+  const handleSimulateAttack = useCallback(() => {
+    clearSimulationTimers();
+    setSimulationRunning(true);
+    const nodeId = randomItem(SENSOR_IDS);
+    setTargetNodeId(nodeId);
+    startPhaseOne();
+
+    const phaseTwoTimeout = setTimeout(() => startPhaseTwo(nodeId), 2000);
+    const phaseThreeTimeout = setTimeout(() => startPhaseThree(nodeId), 5600);
+    timeoutsRef.current = [phaseTwoTimeout, phaseThreeTimeout];
+  }, [clearSimulationTimers, startPhaseOne, startPhaseThree, startPhaseTwo]);
+
+  const handleResetSystem = useCallback(() => {
+    clearSimulationTimers();
+    setSimulationRunning(false);
+    setSimulationPhase("normal");
+    setSystemStatus("normal");
+    setAmbientAttackGlow(false);
+    setAiBriefing(AI_BRIEFING.normal);
+    showToast({ type: "info", message: "Threat contained. System stabilized." });
+    addIncident({
+      sensorId: targetNodeId,
+      event: "Threat contained. System stabilized.",
+      predictionType: "Threat",
+      severity: "low",
+      countermeasure: "Restored nominal telemetry controls and baseline watchdog profile.",
+      memoryAction: "N/A",
+      status: "Closed",
+      mitigationSeconds: 24,
+    });
+  }, [addIncident, clearSimulationTimers, showToast, targetNodeId]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimestamp(new Date());
-      setData((current) => {
-        const next = [...current, buildDataPoint(current[current.length - 1].id + 1, simulationPhase)];
-        return next.slice(-MAX_POINTS);
-      });
-    }, TICK_INTERVAL_MS);
+    memoryRef.current = countermeasureMemory;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(countermeasureMemory));
+  }, [countermeasureMemory]);
 
-    return () => clearInterval(timer);
+  useEffect(() => {
+    phaseRef.current = simulationPhase;
   }, [simulationPhase]);
 
   useEffect(() => {
-    return () => {
-      phaseTimersRef.current.forEach((id) => clearTimeout(id));
-      clearTimeout(toastTimeoutRef.current);
-    };
+    const clock = setInterval(() => setTimestamp(new Date()), 1000);
+    return () => clearInterval(clock);
   }, []);
 
   useEffect(() => {
-    const cadence = FEED_INTERVAL_BY_PHASE_MS[simulationPhase] ?? FEED_INTERVAL_BY_PHASE_MS.normal;
-    const timer = setInterval(() => {
-      const backgroundIncident = buildBackgroundIncident(simulationPhase, attackTargetId);
-      incidentIdRef.current += 1;
-      setIncidents((current) => [
-        {
-          id: incidentIdRef.current,
-          timestamp: formatTime(new Date()),
-          ...backgroundIncident,
-        },
-        ...current,
-      ].slice(0, 12));
-    }, cadence);
-
-    return () => clearInterval(timer);
-  }, [simulationPhase, attackTargetId]);
-
-  const pushIncident = (incident) => {
-    setIncidents((current) => [incident, ...current].slice(0, 12));
-  };
-
-  const nextIncidentId = () => {
-    incidentIdRef.current += 1;
-    return incidentIdRef.current;
-  };
-
-  const schedulePhase = (delay, callback) => {
-    const timer = setTimeout(callback, delay);
-    phaseTimersRef.current.push(timer);
-  };
-
-  const clearSimulationTimers = () => {
-    phaseTimersRef.current.forEach((id) => clearTimeout(id));
-    phaseTimersRef.current = [];
-  };
-
-  const setTimedToast = (payload, ttl = 4600) => {
-    setToast(payload);
-    clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => setToast(null), ttl);
-  };
-
-  const triggerCoordinatedAttack = () => {
-    if (simulationPhase !== PHASE.NORMAL) return;
-    const selectedTargetId = pickRandomAttackSensor(attackTargetId);
-    clearSimulationTimers();
-    setAttackTargetId(selectedTargetId);
-    setSimulationPhase(PHASE.PHASE_1);
-
-    schedulePhase(PHASE_1_MS, () => {
-      setSimulationPhase(PHASE.PHASE_2);
-      playSubtleBeep();
-      setTimedToast({
-        id: Date.now(),
-        title: `Critical anomaly detected in Sensor ${selectedTargetId}`,
-        message: "Flow-pressure correlation breach has crossed critical thresholds.",
+    const telemetryTimer = setInterval(() => {
+      setTelemetry((prev) => {
+        const next = [...prev, generateTelemetryPoint(tickRef.current, phaseRef.current)];
+        tickRef.current += 1;
+        return next.slice(-MAX_POINTS);
       });
-    });
+    }, TICK_MS);
 
-    schedulePhase(PHASE_1_MS + PHASE_2_MS, () => {
-      const now = formatTime(new Date());
-      setSimulationPhase(PHASE.PHASE_3);
-      pushIncident({
-        id: nextIncidentId(),
-        timestamp: now,
-        sensorId: selectedTargetId,
-        event: "Coordinated flow-pressure manipulation signature detected",
-        severity: "critical",
-        status: "Investigating",
-      });
-    });
-  };
+    return () => clearInterval(telemetryTimer);
+  }, []);
 
-  const resetSystem = () => {
-    clearSimulationTimers();
-    setSimulationPhase(PHASE.NORMAL);
-    setToast(null);
-    pushIncident({
-      id: nextIncidentId(),
-      timestamp: formatTime(new Date()),
-      sensorId: "SOC-AUTO",
-      event: "Threat contained. System stabilized.",
-      severity: "medium",
-      status: "Cleared",
-    });
-  };
+  useEffect(() => {
+    const falsePredictionTimer = setInterval(() => {
+      const roll = Math.random();
 
-  const anomalyCount = useMemo(
-    () => data.slice(-10).filter((point) => point.anomalyLevel >= 0.6).length,
-    [data]
+      if (roll < 0.36) {
+        const sensorId = randomItem(SENSOR_IDS);
+        const pattern = randomItem(FALSE_POSITIVE_PATTERNS);
+        const memoryOutcome = applyCountermeasureMemory(pattern);
+        addIncident({
+          sensorId,
+          event: `False prediction on ${pattern.label.toLowerCase()} channel.`,
+          predictionType: "False Positive",
+          severity: "medium",
+          countermeasure: memoryOutcome.countermeasure,
+          memoryAction: memoryOutcome.memoryAction,
+          status: "Resolved",
+          mitigationSeconds: 32 + Math.round(Math.random() * 21),
+        });
+      } else if (roll < 0.52) {
+        addIncident({
+          sensorId: randomItem(SENSOR_IDS),
+          event: "Primary confidence dip detected. LSTM fallback engaged for redundancy.",
+          predictionType: "Threat",
+          severity: "low",
+          countermeasure: "Fallback channel activated and synchronized with transformer output.",
+          memoryAction: "N/A",
+          status: "Mitigated",
+          mitigationSeconds: 18 + Math.round(Math.random() * 14),
+          fallbackActivated: true,
+        });
+      }
+    }, 16000);
+
+    return () => clearInterval(falsePredictionTimer);
+  }, [addIncident, applyCountermeasureMemory]);
+
+  useEffect(() => {
+    return () => {
+      clearSimulationTimers();
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, [clearSimulationTimers]);
+
+  const latestTelemetry = telemetry[telemetry.length - 1] ?? { pressure: 0, flow: 0, level: 0, anomalyLevel: 0 };
+  const previousTelemetry = telemetry[telemetry.length - 2] ?? latestTelemetry;
+
+  const threatConfidence =
+    simulationPhase === "phase3"
+      ? 94
+      : simulationPhase === "phase2"
+      ? 88
+      : simulationPhase === "phase1"
+      ? 57
+      : 18;
+
+  const learnedCountermeasures = useMemo(
+    () =>
+      Object.values(countermeasureMemory)
+        .sort((a, b) => b.lastUsed - a.lastUsed)
+        .map((entry) => ({
+          key: entry.key,
+          label: entry.label,
+          countermeasure: entry.countermeasure,
+          useCount: entry.useCount,
+        })),
+    [countermeasureMemory]
   );
 
-  const phaseScore = {
-    [PHASE.NORMAL]: { nodes: 128, sensors: 412, threat: 24, response: 2.7, confidence: 82 },
-    [PHASE.PHASE_1]: { nodes: 127, sensors: 406, threat: 55, response: 4.6, confidence: 68 },
-    [PHASE.PHASE_2]: { nodes: 123, sensors: 391, threat: 91, response: 8.2, confidence: 86 },
-    [PHASE.PHASE_3]: { nodes: 124, sensors: 394, threat: 94, response: 7.1, confidence: 94 },
-  }[simulationPhase];
-
-  const systemStatus = useMemo(() => {
-    if (simulationPhase === PHASE.PHASE_1) return "suspicious";
-    if (simulationPhase === PHASE.PHASE_2 || simulationPhase === PHASE.PHASE_3) return "active_attack";
-    return "normal";
-  }, [simulationPhase]);
-
-  const aiBriefing = useMemo(() => {
-    if (simulationPhase === PHASE.PHASE_1) {
-      return {
-        headline: "Irregular signal variance detected.",
-        summary:
-          "Early-stage divergence has emerged in pressure and flow correlation. Behavioral model confidence indicates suspicious but not yet conclusive cyber-physical interference.",
-        confidence: 68,
-        threatLevel: "Guarded",
-        signals: [
-          "Pressure oscillation exceeds micro-variance tolerance",
-          "Flow rate trending outside normal baseline envelope",
-          "No maintenance operation scheduled for affected segment",
-        ],
-        recommendations: [
-          `Increase polling frequency for Sensor ${attackTargetId}`,
-          "Enable command-origin tracing for valve cluster",
-          "Prepare containment playbook escalation",
-        ],
-        expanded: false,
-      };
-    }
-
-    if (simulationPhase === PHASE.PHASE_2) {
-      return {
-        headline: "Attack escalation detected across telemetry stream.",
-        summary:
-          "Pressure spikes and sustained flow increase now align with hostile manipulation indicators. Water-level stability is degrading beyond safe operational guardrails.",
-        confidence: 86,
-        threatLevel: "Guarded",
-        signals: [
-          "Sharp pressure spikes beyond operational envelope",
-          "Flow rate sustained above safety threshold",
-          "Cross-sensor divergence in reservoir level trend",
-        ],
-        recommendations: [
-          "Lock remote writes for distribution controllers",
-          "Segment suspicious field gateway traffic",
-          "Dispatch rapid diagnostic verification",
-        ],
-        expanded: false,
-      };
-    }
-
-    if (simulationPhase === PHASE.PHASE_3) {
-      return {
-        headline: "AI Response and Containment Briefing",
-        summary:
-          "Detected coordinated manipulation of flow-pressure correlation. Probability of malicious intrusion: 94%.",
-        confidence: 94,
-        threatLevel: "High",
-        signals: [
-          `Coordinated command burst pattern on Sensor ${attackTargetId} path`,
-          "Pressure-flow coupling broken by non-physical command rhythm",
-          "Anomaly persistence despite baseline damping controls",
-        ],
-        recommendations: [
-          "Maintain controller lockout until forensic validation completes",
-          "Rotate edge device credentials and close exposed sessions",
-          "Continue containment telemetry audit for 15-minute window",
-        ],
-        expanded: true,
-      };
-    }
+  const faultMetrics = useMemo(() => {
+    const falsePredictions = incidents.filter((incident) => incident.predictionType === "False Positive");
+    const resolved = incidents.filter(
+      (incident) => incident.status === "Resolved" || incident.status === "Closed" || incident.status === "Mitigated"
+    );
+    const reuseHits = incidents.filter((incident) => incident.memoryAction?.includes("Reused")).length;
+    const fallbackActivations = incidents.filter((incident) => incident.fallbackActivated).length;
+    const mitigationList = incidents
+      .filter((incident) => typeof incident.mitigationSeconds === "number")
+      .map((incident) => incident.mitigationSeconds);
+    const mitigationAvg =
+      mitigationList.length > 0 ? mitigationList.reduce((total, item) => total + item, 0) / mitigationList.length : 0;
+    const falseRate = incidents.length > 0 ? (falsePredictions.length / incidents.length) * 100 : 0;
+    const recoveryRate = incidents.length > 0 ? (resolved.length / incidents.length) * 100 : 100;
+    const reuseRate = falsePredictions.length > 0 ? (reuseHits / falsePredictions.length) * 100 : 0;
 
     return {
-      headline: "System operating within expected cyber-physical baseline.",
-      summary:
-        "Sensor streams and command telemetry remain aligned with historical behavior. No active intrusion chain detected.",
-      confidence: 82,
-      threatLevel: "Low",
-      signals: [
-        "Pressure and flow variance remain inside tolerance bands",
-        "No unauthorized command writes observed",
-        "Authentication profile matches operator schedule",
-      ],
-      recommendations: [
-        "Maintain segmented network policy enforcement",
-        "Continue adaptive anomaly threshold calibration",
-        "Run next integrity scan during low-demand window",
-      ],
-      expanded: false,
+      falsePredictionRate: falseRate,
+      recoverySuccessRate: recoveryRate,
+      countermeasureReuseHitRate: reuseRate,
+      fallbackActivations,
+      memoryEntries: learnedCountermeasures.length,
+      meanMitigationSeconds: mitigationAvg,
+      benchmarkAttackF1: MODEL_REPORTS.dualModelRedundancy.attackF1,
+      benchmarkAttackRecall: MODEL_REPORTS.dualModelRedundancy.attackRecall,
+      benchmarkAccuracy: MODEL_REPORTS.dualModelRedundancy.accuracy,
     };
-  }, [simulationPhase, attackTargetId]);
+  }, [incidents, learnedCountermeasures.length]);
 
-  const severityByPhase = {
-    [PHASE.NORMAL]: "stable",
-    [PHASE.PHASE_1]: "warning",
-    [PHASE.PHASE_2]: "critical",
-    [PHASE.PHASE_3]: "critical",
-  }[simulationPhase];
+  const kpiCards = useMemo(
+    () => [
+      {
+        title: "Pressure",
+        value: latestTelemetry.pressure,
+        unit: "psi",
+        decimals: 1,
+        delta: ((latestTelemetry.pressure - previousTelemetry.pressure) / previousTelemetry.pressure) * 100 || 0,
+        severity: simulationPhase === "phase2" || simulationPhase === "phase3" ? "critical" : simulationPhase === "phase1" ? "warning" : "normal",
+        icon: FaChartLine,
+      },
+      {
+        title: "Flow Rate",
+        value: latestTelemetry.flow,
+        unit: "m3/h",
+        decimals: 1,
+        delta: ((latestTelemetry.flow - previousTelemetry.flow) / previousTelemetry.flow) * 100 || 0,
+        severity: simulationPhase === "phase2" || simulationPhase === "phase3" ? "critical" : simulationPhase === "phase1" ? "warning" : "normal",
+        icon: FaWater,
+      },
+      {
+        title: "Water Level",
+        value: latestTelemetry.level,
+        unit: "%",
+        decimals: 1,
+        delta: ((latestTelemetry.level - previousTelemetry.level) / previousTelemetry.level) * 100 || 0,
+        severity: simulationPhase === "phase2" ? "critical" : simulationPhase === "phase1" ? "warning" : "normal",
+        icon: FaBell,
+      },
+      {
+        title: "Threat Confidence",
+        value: threatConfidence,
+        unit: "%",
+        decimals: 0,
+        delta: simulationPhase === "normal" ? -1.2 : 6.8,
+        severity: threatConfidence > 80 ? "critical" : threatConfidence > 40 ? "warning" : "normal",
+        icon: FaBrain,
+      },
+      {
+        title: "False Prediction Rate",
+        value: faultMetrics.falsePredictionRate,
+        unit: "%",
+        decimals: 1,
+        delta: -0.6,
+        severity: faultMetrics.falsePredictionRate > 20 ? "warning" : "normal",
+        icon: FaShieldAlt,
+      },
+      {
+        title: "Memory Entries",
+        value: learnedCountermeasures.length,
+        unit: "",
+        decimals: 0,
+        delta: learnedCountermeasures.length > 0 ? 4 : 0,
+        severity: "normal",
+        icon: FaDatabase,
+      },
+    ],
+    [
+      faultMetrics.falsePredictionRate,
+      learnedCountermeasures.length,
+      latestTelemetry.flow,
+      latestTelemetry.level,
+      latestTelemetry.pressure,
+      previousTelemetry.flow,
+      previousTelemetry.level,
+      previousTelemetry.pressure,
+      simulationPhase,
+      threatConfidence,
+    ]
+  );
 
-  const kpiCards = [
-    {
-      title: "Network Nodes Online",
-      value: phaseScore.nodes,
-      unit: "",
-      decimals: 0,
-      delta: simulationPhase === PHASE.NORMAL ? -0.3 : simulationPhase === PHASE.PHASE_1 ? 1.2 : 3.9,
-      severity: severityByPhase,
-      icon: ICONS.nodes,
-    },
-    {
-      title: "Active Sensors",
-      value: phaseScore.sensors,
-      unit: "",
-      decimals: 0,
-      delta: simulationPhase === PHASE.NORMAL ? 0.4 : simulationPhase === PHASE.PHASE_1 ? -2.1 : -4.7,
-      severity: severityByPhase,
-      icon: ICONS.sensors,
-    },
-    {
-      title: "Threat Score",
-      value: phaseScore.threat,
-      unit: "/100",
-      decimals: 0,
-      delta: simulationPhase === PHASE.NORMAL ? -1.4 : simulationPhase === PHASE.PHASE_1 ? 18.9 : 31.6,
-      severity: severityByPhase,
-      icon: ICONS.threat,
-    },
-    {
-      title: "Anomalies (10 ticks)",
-      value: anomalyCount,
-      unit: "",
-      decimals: 0,
-      delta: simulationPhase === PHASE.NORMAL ? -0.7 : simulationPhase === PHASE.PHASE_1 ? 6.1 : 15.4,
-      severity: severityByPhase,
-      icon: ICONS.anomaly,
-    },
-    {
-      title: "Mean Response Time",
-      value: phaseScore.response,
-      unit: "s",
-      decimals: 1,
-      delta: simulationPhase === PHASE.NORMAL ? -2.1 : simulationPhase === PHASE.PHASE_1 ? 4.1 : 8.2,
-      severity: severityByPhase,
-      icon: ICONS.response,
-    },
-    {
-      title: "AI Confidence",
-      value: aiBriefing.confidence,
-      unit: "%",
-      decimals: 0,
-      delta: simulationPhase === PHASE.NORMAL ? 0.6 : simulationPhase === PHASE.PHASE_1 ? -5.4 : 6.2,
-      severity: severityByPhase,
-      icon: ICONS.confidence,
-    },
-  ];
-
-  const phaseLabel = {
-    [PHASE.NORMAL]: "System Baseline",
-    [PHASE.PHASE_1]: "Phase 1 - Subtle Anomaly",
-    [PHASE.PHASE_2]: "Phase 2 - Attack Escalation",
-    [PHASE.PHASE_3]: "Phase 3 - AI Response & Containment",
-  }[simulationPhase];
-
-  const attackGlowActive = simulationPhase === PHASE.PHASE_2 || simulationPhase === PHASE.PHASE_3;
+  const validationLog = useMemo(
+    () =>
+      incidents.filter(
+        (incident) => incident.predictionType === "False Positive" || incident.memoryAction?.includes("Stored") || incident.memoryAction?.includes("Reused")
+      ),
+    [incidents]
+  );
 
   return (
-    <div className="dashboard-grid min-h-screen bg-bg text-textPrimary">
-      <Header systemStatus={systemStatus} timestamp={timestamp} />
+    <div className="watertech-shell min-h-screen">
+      <div
+        className="watertech-background"
+        style={{
+          "--bg-image-primary": `url('${PRIMARY_BG_IMAGE}')`,
+          "--bg-image-secondary": `url('${SECONDARY_BG_IMAGE}')`,
+        }}
+      />
+      <div className="watertech-overlay" />
+      <div className="watertech-gradient" />
+      <div className="watertech-lightveil" />
+      <div className="watertech-particles" />
+      <div className="floating-glow floating-glow-a" />
+      <div className="floating-glow floating-glow-b" />
 
       <AnimatePresence>
-        {attackGlowActive ? (
+        {!showLanding && ambientAttackGlow ? (
           <motion.div
-            className="pointer-events-none fixed inset-0 z-20 bg-[radial-gradient(circle_at_50%_15%,rgba(220,38,38,0.16),rgba(220,38,38,0.03)_42%,transparent_72%)]"
+            className="attack-ambient"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.36, ease: "easeInOut" }}
+            transition={{ duration: 0.34 }}
           />
         ) : null}
       </AnimatePresence>
 
-      <main className="relative z-30 mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {kpiCards.map((card, index) => (
-            <KPICard key={card.title} {...card} index={index} />
-          ))}
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
-          <LiveCharts data={data} simulationPhase={simulationPhase} />
-          <AIExplanation
-            confidence={aiBriefing.confidence}
-            headline={aiBriefing.headline}
-            summary={aiBriefing.summary}
-            signals={aiBriefing.signals}
-            recommendations={aiBriefing.recommendations}
-            threatLevel={aiBriefing.threatLevel}
-            expanded={aiBriefing.expanded}
-          />
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
-          <IncidentLog incidents={incidents} />
-
-          <div className="space-y-6">
-            <div className="glass-panel rounded-xl p-4 shadow-panel sm:p-5">
-              <h2 className="text-lg font-semibold">Simulation Control</h2>
-              <p className="mt-2 text-sm leading-6 text-textSecondary">
-                Execute coordinated cyber attack behavior with progressive anomaly detection, escalation, and AI-led containment.
-              </p>
-              <p className="mt-3 text-xs uppercase tracking-[0.14em] text-textSecondary">{phaseLabel}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-textSecondary/90">
-                Background SOC feed active every{" "}
-                {Math.round((FEED_INTERVAL_BY_PHASE_MS[simulationPhase] ?? FEED_INTERVAL_BY_PHASE_MS.normal) / 1000)}s
-              </p>
-
-              <div className="mt-5 flex flex-col gap-3">
-                <motion.button
-                  type="button"
-                  onClick={triggerCoordinatedAttack}
-                  disabled={simulationPhase !== PHASE.NORMAL}
-                  className="w-full rounded-xl border border-critical/55 bg-critical/15 px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-critical transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-45"
-                  whileHover={simulationPhase === PHASE.NORMAL ? { y: -2, boxShadow: "0 12px 24px rgba(220, 38, 38, 0.24)" } : {}}
-                  whileTap={simulationPhase === PHASE.NORMAL ? { scale: 0.98 } : {}}
-                  transition={{ duration: 0.24 }}
-                >
-                  {simulationPhase === PHASE.NORMAL ? "Simulate Coordinated Attack" : "Simulation In Progress"}
-                </motion.button>
-
-                <motion.button
-                  type="button"
-                  onClick={resetSystem}
-                  className="w-full rounded-xl border border-accent/45 bg-accent/10 px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-accent transition-all duration-300"
-                  whileHover={{ y: -2, boxShadow: "0 10px 20px rgba(37, 99, 235, 0.2)" }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ duration: 0.24 }}
-                >
-                  Reset System
-                </motion.button>
-              </div>
-            </div>
-
-            <NetworkMap simulationPhase={simulationPhase} targetNodeId={attackTargetId} />
-          </div>
-        </section>
-      </main>
-
       <AnimatePresence>
-        {toast ? (
-          <motion.aside
-            className="fixed right-4 top-20 z-50 w-[min(390px,92vw)] rounded-xl border border-critical/70 bg-gradient-to-br from-critical/24 via-card/95 to-card/98 p-4 ring-1 ring-critical/45 shadow-[0_18px_40px_rgba(127,29,29,0.56)] backdrop-blur-md"
-            initial={{ opacity: 0, x: 60 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 46 }}
-            transition={{ duration: 0.34, ease: "easeOut" }}
-          >
-            <p className="text-xs uppercase tracking-[0.14em] text-critical">Security Alert</p>
-            <p className="mt-1 text-sm font-semibold text-textPrimary">{toast.title}</p>
-            <p className="mt-1 text-sm text-textSecondary">{toast.message}</p>
-          </motion.aside>
+        {!showLanding && overlayFlash ? (
+          <motion.div
+            className="pointer-events-none fixed inset-0 z-40 bg-critical/20"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.5, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.34 }}
+          />
         ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+        {showLanding ? (
+          <LandingScreen key="landing" onEnter={() => setShowLanding(false)} />
+        ) : (
+          <motion.div
+            key="dashboard"
+            className="relative z-20"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.36 }}
+          >
+            <Header systemStatus={systemStatus} timestamp={timestamp} />
+
+            <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+              <motion.section
+                className="glass-panel rounded-xl p-4 shadow-panel sm:p-5"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">Control Console</p>
+                    <h2 className="mt-1 text-lg font-semibold text-textPrimary">Cyber Attack Simulation Mode</h2>
+                    <p className="mt-1 text-sm text-textSecondary">
+                      Progressive anomaly lifecycle with AI reasoning, incident memory, and fault-tolerant response.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSimulateAttack}
+                      className="ripple-btn inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-bg"
+                    >
+                      <FaChartLine className="h-3.5 w-3.5" />
+                      Simulate Coordinated Attack
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetSystem}
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-card/85 px-4 py-2 text-sm font-semibold text-textPrimary transition-all duration-300 hover:-translate-y-0.5 hover:bg-card"
+                    >
+                      <FaSyncAlt className="h-3.5 w-3.5" />
+                      Reset System
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("operations")}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all duration-300 ${
+                        activeView === "operations"
+                          ? "border-accent/45 bg-accent/15 text-accent"
+                          : "border-white/15 bg-card/60 text-textSecondary hover:text-textPrimary"
+                      }`}
+                    >
+                      Operations View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("validation")}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all duration-300 ${
+                        activeView === "validation"
+                          ? "border-accent/45 bg-accent/15 text-accent"
+                          : "border-white/15 bg-card/60 text-textSecondary hover:text-textPrimary"
+                      }`}
+                    >
+                      Model & Fault Metrics
+                    </button>
+                  </div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-textSecondary">
+                    Active target node: <span className="font-semibold text-textPrimary">{targetNodeId}</span>
+                    {simulationRunning ? " | simulation in progress" : " | monitoring idle"}
+                  </p>
+                </div>
+              </motion.section>
+
+              <AnimatePresence mode="wait">
+                {activeView === "operations" ? (
+                  <motion.div
+                    key="operations"
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-5"
+                  >
+                    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {kpiCards.map((card, index) => (
+                        <KPICard key={card.title} index={index} {...card} />
+                      ))}
+                    </section>
+
+                    <section className="grid gap-4 xl:grid-cols-3">
+                      <div className="xl:col-span-2">
+                        <LiveCharts data={telemetry} simulationPhase={simulationPhase} />
+                      </div>
+                      <div className="space-y-4">
+                        <AIExplanation {...aiBriefing} />
+                        <NetworkMap simulationPhase={simulationPhase} targetNodeId={targetNodeId} />
+                      </div>
+                    </section>
+
+                    <IncidentLog incidents={incidents} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="validation"
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-5"
+                  >
+                    <section className="grid gap-4 xl:grid-cols-2">
+                      <ModelPerformancePanel reports={MODEL_REPORTS} />
+                      <FaultTolerancePanel metrics={faultMetrics} learnedCountermeasures={learnedCountermeasures} />
+                    </section>
+                    <IncidentLog incidents={validationLog.length > 0 ? validationLog : incidents.slice(0, 8)} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </main>
+
+            <AnimatePresence>
+              {toast ? (
+                <motion.div
+                  className="fixed right-4 top-[92px] z-50 max-w-sm rounded-xl border border-critical/50 bg-[linear-gradient(140deg,rgba(78,16,24,0.92),rgba(42,10,16,0.94))] p-4 text-textPrimary shadow-[0_18px_42px_rgba(0,0,0,0.5)]"
+                  initial={{ opacity: 0, x: 56 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 56 }}
+                  transition={{ duration: 0.32, ease: "easeOut" }}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-critical/90">
+                    {toast.type === "critical" ? "Critical Alert" : "System Update"}
+                  </p>
+                  <p className="mt-1 text-sm text-textPrimary">{toast.message}</p>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

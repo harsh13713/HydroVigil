@@ -7,7 +7,7 @@ const STATUS_CONFIG = {
     ring: "ring-accent/40",
     bg: "bg-accent/10",
     dot: "bg-accent",
-    glow: "rgba(37,99,235,0.18)",
+    glow: "rgba(118,213,255,0.28)",
   },
   suspicious: {
     label: "Suspicious Activity",
@@ -15,7 +15,7 @@ const STATUS_CONFIG = {
     ring: "ring-warning/45",
     bg: "bg-warning/12",
     dot: "bg-warning",
-    glow: "rgba(217,119,6,0.24)",
+    glow: "rgba(248,185,90,0.3)",
   },
   active_attack: {
     label: "Active Attack Detected",
@@ -23,7 +23,7 @@ const STATUS_CONFIG = {
     ring: "ring-critical/45",
     bg: "bg-critical/12",
     dot: "bg-critical",
-    glow: "rgba(220,38,38,0.28)",
+    glow: "rgba(255,95,109,0.34)",
   },
 };
 
