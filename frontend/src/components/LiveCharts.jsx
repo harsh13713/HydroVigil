@@ -47,8 +47,8 @@ export default function LiveCharts({ data, simulationPhase }) {
   const anomalyEnd = anomalyData[anomalyData.length - 1]?.time;
 
   return (
-    <section className="glass-panel rounded-xl p-4 shadow-panel sm:p-5">
-      <div className="mb-4 flex items-center justify-between">
+    <section className="glass-panel rounded-2xl p-4 shadow-panel sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-textPrimary">Live Monitoring</h2>
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-textSecondary">
           Feed health: {phaseStyle.feed}
@@ -69,11 +69,13 @@ export default function LiveCharts({ data, simulationPhase }) {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
         {CHARTS.map((chart, index) => (
           <motion.div
             key={chart.key}
-            className="rounded-xl border border-white/10 bg-card/68 p-3"
+            className={`rounded-xl border border-white/10 bg-card/68 p-3 ${
+              chart.key === "level" ? "lg:col-span-2" : ""
+            }`}
             style={{ "--line-color": phaseStyle.lineColor }}
             animate={{ "--line-color": phaseStyle.lineColor }}
             transition={{ duration: 0.36, ease: "easeInOut", delay: index * 0.02 }}
@@ -83,7 +85,7 @@ export default function LiveCharts({ data, simulationPhase }) {
               <p className="text-sm font-medium text-textPrimary">{chart.label}</p>
               <p className="text-xs text-textSecondary">Real-time sensor telemetry</p>
             </div>
-            <div className="h-44">
+            <div className="h-40 sm:h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data} margin={{ left: 4, right: 8, top: 8, bottom: 0 }}>
                   <defs>

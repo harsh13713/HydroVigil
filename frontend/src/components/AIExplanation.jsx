@@ -18,7 +18,7 @@ export default function AIExplanation({
   const threatClass = THREAT_STYLE[threatLevel] ?? THREAT_STYLE.Low;
 
   return (
-    <section className="glass-panel rounded-xl p-4 shadow-panel sm:p-5">
+    <section className="glass-panel rounded-2xl p-4 shadow-panel sm:p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-textPrimary">AI Threat Briefing</h2>
         <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">Inference Core v4.8</p>
@@ -66,12 +66,12 @@ export default function AIExplanation({
           ) : null}
         </AnimatePresence>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
           <div>
             <p className="text-xs uppercase tracking-[0.12em] text-textSecondary">Indicators</p>
             <ul className="mt-2 space-y-2 text-sm text-textPrimary">
               {signals.map((signal) => (
-                <li key={signal} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                <li key={signal} className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 leading-6">
                   {signal}
                 </li>
               ))}
@@ -81,7 +81,10 @@ export default function AIExplanation({
             <p className="text-xs uppercase tracking-[0.12em] text-textSecondary">Recommended Actions</p>
             <ul className="mt-2 space-y-2 text-sm text-textPrimary">
               {recommendations.map((recommendation) => (
-                <li key={recommendation} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                <li
+                  key={recommendation}
+                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 leading-6"
+                >
                   {recommendation}
                 </li>
               ))}

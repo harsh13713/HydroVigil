@@ -46,16 +46,13 @@ function ModelCard({ title, values, highlight }) {
 
 export default function ModelPerformancePanel({ reports }) {
   return (
-    <section className="glass-panel rounded-xl p-4 shadow-panel sm:p-5">
+    <section className="glass-panel rounded-2xl p-4 shadow-panel sm:p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-textPrimary">Model Validation Results</h2>
         <p className="text-xs uppercase tracking-[0.12em] text-textSecondary">Training/Test Benchmark</p>
       </div>
 
-      <div className="space-y-3">
-        <ModelCard title="Transformer Dominant + LSTM Fallback" values={reports.transformerLstmFallback} />
-        <ModelCard title="Dual Model Redundancy" values={reports.dualModelRedundancy} highlight />
-      </div>
+      <ModelCard title="Dual Model Redundancy" values={reports.dualModelRedundancy} highlight />
     </section>
   );
 }

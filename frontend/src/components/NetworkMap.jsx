@@ -26,7 +26,7 @@ export default function NetworkMap({ simulationPhase, targetNodeId = "P-23" }) {
   const targetNode = getNode(targetNodeId) ?? getNode("P-23");
 
   return (
-    <section className="glass-panel rounded-xl p-4 shadow-panel sm:p-5">
+    <section className="glass-panel rounded-2xl p-4 shadow-panel sm:p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-textPrimary">Sensor Network Map</h2>
         <span className="text-xs uppercase tracking-[0.12em] text-textSecondary">Zone-3 Topology</span>

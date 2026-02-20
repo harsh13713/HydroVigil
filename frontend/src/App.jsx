@@ -5,9 +5,10 @@ import {
   FaBell,
   FaBrain,
   FaChartLine,
+  FaHome,
   FaLock,
+  FaListAlt,
   FaNetworkWired,
-  FaDatabase,
   FaShieldAlt,
   FaSyncAlt,
   FaWater,
@@ -88,9 +89,9 @@ const FALSE_POSITIVE_PATTERNS = [
 ];
 
 const PRIMARY_BG_IMAGE =
-  "/bg-pipeline-close.jpg";
+  "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1920&q=80";
 const SECONDARY_BG_IMAGE =
-  "/bg-waterflow-line.jpg";
+  "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1920&q=80";
 
 const LANDING_CARDS = [
   {
@@ -111,6 +112,11 @@ const LANDING_CARDS = [
       "Adaptive counter-actions, false-positive memory reuse, and fault-tolerant response for mission-critical operations.",
     icon: FaLock,
   },
+];
+
+const DASHBOARD_MENU = [
+  { key: "operations", label: "Operations", icon: FaHome },
+  { key: "validation", label: "Model & Fault Metrics", icon: FaListAlt },
 ];
 
 const AI_BRIEFING = {
@@ -349,14 +355,16 @@ function LandingScreen({ onEnter }) {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
         >
-          <p className="text-xs uppercase tracking-[0.22em] text-accent/95">National Water Cybersecurity Grid</p>
-          <h1 className="mt-4 text-3xl font-semibold leading-tight text-textPrimary sm:text-5xl">
-            HydroVigil
-            <span className="block text-xl font-medium text-accent/95 sm:mt-2 sm:text-3xl">
+          <p className="text-xs uppercase tracking-[0.22em] text-[#baf2ff] [text-shadow:0_1px_8px_rgba(0,0,0,0.35)]">
+            National Water Cybersecurity Grid
+          </p>
+          <h1 className="mt-4 text-3xl font-semibold leading-tight text-white [text-shadow:0_2px_14px_rgba(0,0,0,0.42)] sm:text-5xl">
+            <span className="text-white">HydroVigil</span>
+            <span className="block text-xl font-medium text-[#d9f6ff] sm:mt-2 sm:text-3xl">
               AI-Powered Cyber Defense for Smart Water Infrastructure
             </span>
           </h1>
-          <p className="mx-auto mt-5 max-w-3xl text-sm leading-7 text-textSecondary sm:text-base">
+          <p className="mx-auto mt-5 max-w-3xl text-sm leading-7 text-[#e7f4ff] sm:text-base">
             A futuristic command interface for real-time attack simulation, intelligent threat reasoning, and resilient
             system stabilization.
           </p>
@@ -388,8 +396,8 @@ function LandingScreen({ onEnter }) {
                 <div className="inline-flex rounded-lg border border-accent/45 bg-accent/10 p-2 text-accent">
                   <Icon className="h-4 w-4" />
                 </div>
-                <h3 className="mt-3 text-base font-semibold text-textPrimary">{card.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-textSecondary">{card.description}</p>
+                <h3 className="mt-3 text-base font-semibold text-white">{card.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#dcefff]">{card.description}</p>
               </motion.article>
             );
           })}
@@ -790,19 +798,9 @@ useEffect(() => {
         severity: faultMetrics.falsePredictionRate > 20 ? "warning" : "normal",
         icon: FaShieldAlt,
       },
-      {
-        title: "Memory Entries",
-        value: learnedCountermeasures.length,
-        unit: "",
-        decimals: 0,
-        delta: learnedCountermeasures.length > 0 ? 4 : 0,
-        severity: "normal",
-        icon: FaDatabase,
-      },
     ],
     [
       faultMetrics.falsePredictionRate,
-      learnedCountermeasures.length,
       latestTelemetry.flow,
       latestTelemetry.level,
       latestTelemetry.pressure,
@@ -821,6 +819,12 @@ useEffect(() => {
       ),
     [incidents]
   );
+  const falsePredictionCount = incidents.filter((incident) => incident.predictionType === "False Positive").length;
+  const unresolvedCount = incidents.filter(
+    (incident) => incident.status === "Investigating" || incident.status === "Open"
+  ).length;
+  const criticalCount = incidents.filter((incident) => incident.severity === "critical").length;
+  const recoveryRateLabel = `${faultMetrics.recoverySuccessRate.toFixed(1)}%`;
 
   return (
     <div className="watertech-shell min-h-screen">
@@ -862,6 +866,8 @@ useEffect(() => {
         ) : null}
       </AnimatePresence>
 
+      {!showLanding ? <div className="dashboard-curtain" /> : null}
+
       <AnimatePresence mode="wait">
         {showLanding ? (
           <LandingScreen key="landing" onEnter={() => setShowLanding(false)} />
@@ -876,119 +882,222 @@ useEffect(() => {
           >
             <Header systemStatus={systemStatus} timestamp={timestamp} />
 
-            <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-              <motion.section
-                className="glass-panel rounded-xl p-4 shadow-panel sm:p-5"
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">Control Console</p>
-                    <h2 className="mt-1 text-lg font-semibold text-textPrimary">Cyber Attack Simulation Mode</h2>
-                    <p className="mt-1 text-sm text-textSecondary">
-                      Progressive anomaly lifecycle with AI reasoning, incident memory, and fault-tolerant response.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSimulateAttack}
-                      className="ripple-btn inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-bg"
-                    >
-                      <FaChartLine className="h-3.5 w-3.5" />
-                      Simulate Coordinated Attack
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetSystem}
-                      className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-card/85 px-4 py-2 text-sm font-semibold text-textPrimary transition-all duration-300 hover:-translate-y-0.5 hover:bg-card"
-                    >
-                      <FaSyncAlt className="h-3.5 w-3.5" />
-                      Reset System
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveView("operations")}
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all duration-300 ${
-                        activeView === "operations"
-                          ? "border-accent/45 bg-accent/15 text-accent"
-                          : "border-white/15 bg-card/60 text-textSecondary hover:text-textPrimary"
-                      }`}
-                    >
-                      Operations View
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveView("validation")}
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-all duration-300 ${
-                        activeView === "validation"
-                          ? "border-accent/45 bg-accent/15 text-accent"
-                          : "border-white/15 bg-card/60 text-textSecondary hover:text-textPrimary"
-                      }`}
-                    >
-                      Model & Fault Metrics
-                    </button>
-                  </div>
-                  <p className="text-xs uppercase tracking-[0.12em] text-textSecondary">
-                    Active target node: <span className="font-semibold text-textPrimary">{targetNodeId}</span>
-                    {simulationRunning ? " | simulation in progress" : " | monitoring idle"}
-                  </p>
-                </div>
-              </motion.section>
-
-              <AnimatePresence mode="wait">
-                {activeView === "operations" ? (
-                  <motion.div
-                    key="operations"
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-5"
-                  >
-                    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                      {kpiCards.map((card, index) => (
-                        <KPICard key={card.title} index={index} {...card} />
-                      ))}
-                    </section>
-
-                    <section className="grid gap-4 xl:grid-cols-3">
-                      <div className="xl:col-span-2">
-                        <LiveCharts data={telemetry} simulationPhase={simulationPhase} />
+            <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
+              <div className="dashboard-stage layout-frame">
+                <div className="layout-body">
+                  <aside className="layout-sidebar">
+                    <div className="layout-sidebar-panel">
+                      <p className="layout-sidebar-title">Navigation</p>
+                      <div className="layout-menu">
+                        {DASHBOARD_MENU.map((item) => {
+                          const Icon = item.icon;
+                          const isActive =
+                            (item.key === "operations" && activeView === "operations") ||
+                            (item.key === "validation" && activeView === "validation");
+                          return (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => {
+                                if (item.key === "operations") setActiveView("operations");
+                                if (item.key === "validation") setActiveView("validation");
+                              }}
+                              className={`layout-menu-item ${
+                                isActive ? "layout-menu-item-active" : ""
+                              }`}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              <span>{item.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                      <div className="space-y-4">
+                    </div>
+
+                    <div className="layout-sidebar-panel">
+                      <p className="layout-sidebar-title">Simulation Controls</p>
+                      <div className="mt-3 flex flex-col gap-2.5">
+                        <button
+                          type="button"
+                          onClick={handleSimulateAttack}
+                          className="ripple-btn inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-bg"
+                        >
+                          <FaChartLine className="h-3.5 w-3.5" />
+                          Simulate Coordinated Attack
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetSystem}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-card/85 px-4 py-2.5 text-sm font-semibold text-textPrimary transition-all duration-300 hover:-translate-y-0.5 hover:bg-card"
+                        >
+                          <FaSyncAlt className="h-3.5 w-3.5" />
+                          Reset System
+                        </button>
+                      </div>
+                      <p className="mt-3 text-xs uppercase tracking-[0.11em] text-textSecondary">
+                        Target node: <span className="font-semibold text-textPrimary">{targetNodeId}</span>
+                      </p>
+                    </div>
+
+                    <div className="layout-status-grid">
+                      <div className="status-chip">
+                        <p>Critical Incidents</p>
+                        <span>{criticalCount}</span>
+                      </div>
+                      <div className="status-chip">
+                        <p>Open Investigations</p>
+                        <span>{unresolvedCount}</span>
+                      </div>
+                      <div className="status-chip">
+                        <p>False Positives</p>
+                        <span>{falsePredictionCount}</span>
+                      </div>
+                      <div className="status-chip">
+                        <p>Recovery Success</p>
+                        <span>{recoveryRateLabel}</span>
+                      </div>
+                    </div>
+
+                  </aside>
+
+                  <section className="layout-main">
+                    <AnimatePresence mode="wait">
+                      {activeView === "operations" ? (
+                        <motion.div
+                          key="operations"
+                          initial={{ opacity: 0, y: 14 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          transition={{ duration: 0.3 }}
+                          className="space-y-4"
+                        >
+                          <div className="layout-panel-head">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-textSecondary">
+                              Operational Snapshot
+                            </p>
+                            <p className="text-[10px] uppercase tracking-[0.11em] text-textSecondary">
+                              5 Live Metrics
+                            </p>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                            {kpiCards.map((card, index) => (
+                              <KPICard key={card.title} index={index} {...card} />
+                            ))}
+                          </div>
+                          <LiveCharts data={telemetry} simulationPhase={simulationPhase} />
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="validation"
+                          initial={{ opacity: 0, y: 14 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          transition={{ duration: 0.3 }}
+                          className="space-y-4"
+                        >
+                          <div className="layout-panel-head">
+                            <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">
+                              Model Validation and Fault-Tolerance Intelligence
+                            </p>
+                          </div>
+                          <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                            <ModelPerformancePanel reports={MODEL_REPORTS} />
+                            <FaultTolerancePanel metrics={faultMetrics} />
+                          </section>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </section>
+
+                  <aside className="layout-right">
+                    {activeView === "operations" ? (
+                      <>
                         <AIExplanation {...aiBriefing} />
                         <NetworkMap simulationPhase={simulationPhase} targetNodeId={targetNodeId} />
-                      </div>
-                    </section>
+                      </>
+                    ) : (
+                      <>
+                        <div className="layout-sidebar-panel">
+                          <p className="layout-sidebar-title">Key Outcomes</p>
+                          <div className="mt-3 space-y-2 text-sm text-textSecondary">
+                            <p className="rounded-lg border border-white/10 bg-card/60 px-3 py-2">
+                              Dual redundancy attack F1:{" "}
+                              <span className="font-semibold text-textPrimary">
+                                {MODEL_REPORTS.dualModelRedundancy.attackF1.toFixed(2)}
+                              </span>
+                            </p>
+                            <p className="rounded-lg border border-white/10 bg-card/60 px-3 py-2">
+                              Countermeasure reuse hit:{" "}
+                              <span className="font-semibold text-textPrimary">
+                                {faultMetrics.countermeasureReuseHitRate.toFixed(1)}%
+                              </span>
+                            </p>
+                            <p className="rounded-lg border border-white/10 bg-card/60 px-3 py-2">
+                              False prediction rate:{" "}
+                              <span className="font-semibold text-textPrimary">
+                                {faultMetrics.falsePredictionRate.toFixed(1)}%
+                              </span>
+                            </p>
+                          </div>
+                        </div>
 
-                    <IncidentLog incidents={incidents} />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="validation"
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-5"
-                  >
-                    <section className="grid gap-4 xl:grid-cols-2">
-                      <ModelPerformancePanel reports={MODEL_REPORTS} />
-                      <FaultTolerancePanel metrics={faultMetrics} learnedCountermeasures={learnedCountermeasures} />
-                    </section>
-                    <IncidentLog incidents={validationLog.length > 0 ? validationLog : incidents.slice(0, 8)} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                        <section className="layout-sidebar-panel">
+                          <p className="layout-sidebar-title">Learned Counter-Action Memory</p>
+                          <div className="mt-2 space-y-2">
+                            {learnedCountermeasures.length === 0 ? (
+                              <p className="text-sm text-textSecondary">No learned counter-actions yet.</p>
+                            ) : (
+                              learnedCountermeasures.slice(0, 4).map((entry) => (
+                                <div
+                                  key={entry.key}
+                                  className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2"
+                                >
+                                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-textPrimary">
+                                    {entry.label}
+                                  </p>
+                                  <p className="mt-1 text-xs leading-5 text-textSecondary">{entry.countermeasure}</p>
+                                  <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-accent">
+                                    Reuse count: {entry.useCount}
+                                  </p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </section>
+                      </>
+                    )}
+                  </aside>
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {activeView === "operations" ? (
+                    <motion.section
+                      key="operations-log"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.28 }}
+                      className="mt-4"
+                    >
+                      <IncidentLog incidents={incidents} hideCounterAction />
+                    </motion.section>
+                  ) : (
+                    <motion.section
+                      key="validation-log"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.28 }}
+                      className="mt-4"
+                    >
+                      <IncidentLog
+                        incidents={validationLog.length > 0 ? validationLog : incidents.slice(0, 8)}
+                        hidePredictionSeverity
+                      />
+                    </motion.section>
+                  )}
+                </AnimatePresence>
+              </div>
             </main>
 
             <AnimatePresence>
